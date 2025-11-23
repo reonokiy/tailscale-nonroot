@@ -1,0 +1,17 @@
+Description=Tailscale node agent
+Documentation=https://tailscale.com/kb/
+Wants=network-pre.target
+After=network-pre.target NetworkManager.service systemd-resolved.service
+
+[Service]
+ExecStart=%h/.tailscale/bin/tailscaled --statedir=%h/.tailscale/data --socket=%h/.tailscale/tailscaled.sock -tun=userspace-networking --port=41641
+ExecStopPost=%h/.tailscale/bin/tailscaled --cleanup
+
+Restart=always
+RestartSec=5
+
+StandardOutput=append:%h/.tailscale/data/tailscaled.log
+StandardError=append:%h/.tailscale/data/tailscaled.log
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,11 @@
+[tools]
+"go:tailscale.com/cmd/tailscale" = "v1.90.8"
+"go:tailscale.com/cmd/tailscaled" = "v1.90.8"
+
+[tasks]
+[tasks.tailscale]
+run = "tailscale --socket=./.tailscale/tailscaled.sock"
+[tasks.tailscaled]
+run = "tailscaled --statedir=./.tailscale/data --socket=./.tailscale/tailscaled.sock -tun=userspace-networking --port=41641"
+[tasks.'cleanup']
+run = "rm -rf .tailscale"
