@@ -7,7 +7,7 @@ echo "Installing Tailscale version $VERSION"
 TARBALL_URL="https://pkgs.tailscale.com/stable/tailscale_${VERSION}_amd64.tgz"
 curl -L $TARBALL_URL -o /tmp/tailscale.tgz
 mkdir -p /tmp/tailscale_extracted
-tar -xzf /tmp/tailscale.tgz -C /tmp/tailscale_extracted
+tar -xzf /tmp/tailscale.tgz -C /tmp/tailscale_extracted --strip-components=1
 
 # move the binaries to ~/.tailscale/bin
 mkdir -p ~/.tailscale/bin
@@ -18,8 +18,7 @@ echo "Tailscale binaries installed to ~/.tailscale/bin/"
 # add a script to ~/.local/bin/tailscale
 mkdir -p ~/.local/bin
 echo '#!/bin/bash' > ~/.local/bin/tailscale
-echo 'export TAILSCALE_SOCKET=$HOME/.tailscale/tailscaled.sock' >> ~/.local/bin/tailscale
-echo '~/.tailscale/bin/tailscale "$@"' >> ~/.local/bin/tailscale
+echo '~/.tailscale/bin/tailscale --socket=$HOME/.tailscale/tailscaled.sock "$@"' >> ~/.local/bin/tailscale
 chmod +x ~/.local/bin/tailscale
 echo "Tailscale command wrapper installed to ~/.local/bin/tailscale"
 

@@ -1,17 +1,17 @@
-Description=Tailscale node agent
+[Unit]
+Description=Tailscale node agent (non-root)
 Documentation=https://tailscale.com/kb/
 Wants=network-pre.target
 After=network-pre.target NetworkManager.service systemd-resolved.service
 
 [Service]
+ExecStartPre=/usr/bin/env mkdir -p %h/.tailscale/data
 ExecStart=%h/.tailscale/bin/tailscaled --statedir=%h/.tailscale/data --socket=%h/.tailscale/tailscaled.sock -tun=userspace-networking --port=41641
 ExecStopPost=%h/.tailscale/bin/tailscaled --cleanup
-
 Restart=always
 RestartSec=5
-
-StandardOutput=append:%h/.tailscale/data/tailscaled.log
-StandardError=append:%h/.tailscale/data/tailscaled.log
+StandardOutput=journal
+StandardError=inherit
 
 [Install]
 WantedBy=default.target
