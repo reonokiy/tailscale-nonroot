@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Figure out script dir if available (e.g. local exec); fall back to empty when piped
+SCRIPT_DIR=""
+if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" != "-" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tailscale-install.XXXXXX")"
 
 log() {
@@ -104,18 +108,22 @@ setup_service() {
     return
   fi
 
+  install -d "$HOME/.tailscale"
   install -d "$HOME/.config/systemd/user"
+  local managed_service="$HOME/.tailscale/tailscaled.service"
   local service_path="$HOME/.config/systemd/user/tailscaled.service"
 
-  if [[ -f "${SCRIPT_DIR}/tailscaled.service" ]]; then
-    cp "${SCRIPT_DIR}/tailscaled.service" "$service_path"
+  if [[ -n "$SCRIPT_DIR" && -f "${SCRIPT_DIR}/tailscaled.service" ]]; then
+    cp "${SCRIPT_DIR}/tailscaled.service" "$managed_service"
   else
     log "Local tailscaled.service not found; downloading the service unit."
-    if ! curl -fsSL https://raw.githubusercontent.com/reonokiy/tailscale-nonroot/main/tailscaled.service -o "$service_path"; then
+    if ! curl -fsSL https://raw.githubusercontent.com/reonokiy/tailscale-nonroot/main/tailscaled.service -o "$managed_service"; then
       log "Warning: failed to retrieve tailscaled.service; skipping systemd setup."
       return
     fi
   fi
+
+  ln -sf "$managed_service" "$service_path"
 
   systemctl --user daemon-reload
   if systemctl --user enable tailscaled.service --now; then
