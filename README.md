@@ -22,5 +22,15 @@ TAILSCALE_VERSION=1.74.0 bash install.sh
 
 ## After install
 
-- Wrapper script is placed at `~/.local/bin/tailscale`. Make sure `~/.local/bin` is in `PATH`.
-- The script installs and enables `tailscaled.service` as a systemd user service (userspace networking). If systemd user services aren’t available in the current session, you can start it later with `systemctl --user enable --now tailscaled.service`.
+- Parameterized wrappers live under `~/.tailscale/cmd/{tailscale,tailscaled}`. The installer links `~/.local/bin/tailscale` to the wrapper so it automatically talks to your user-space socket.
+- The script installs and enables `tailscaled.service` as a systemd user service (userspace networking). If systemd user services aren’t available, it falls back to managing `tailscaled` with [PM2](https://pm2.keymetrics.io/) when `pm2` is present, or prints the command to run manually.
+
+## Running without systemd
+
+If your environment lacks systemd user services, install PM2 as your user (e.g., `npm install -g pm2`) **before** running the installer so the script can keep `tailscaled` alive via PM2. You can also configure PM2 auto-start with `pm2 startup`.
+
+To start `tailscaled` manually, run the wrapper the installer created:
+
+```bash
+~/.tailscale/cmd/tailscaled
+```

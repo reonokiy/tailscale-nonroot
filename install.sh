@@ -46,6 +46,12 @@ case "$ARCH" in
     ;;
 esac
 
+TAILSCALE_HOME="$HOME/.tailscale"
+BIN_DIR="$TAILSCALE_HOME/bin"
+CMD_DIR="$TAILSCALE_HOME/cmd"
+DATA_DIR="$TAILSCALE_HOME/data"
+SOCKET_PATH="$TAILSCALE_HOME/tailscaled.sock"
+
 fetch_latest_version() {
   local payload version
   payload=$(curl -fsSL https://api.github.com/repos/tailscale/tailscale/releases/latest 2>/dev/null || true)
@@ -79,33 +85,47 @@ if [[ ! -x "$EXTRACT_DIR/tailscale" || ! -x "$EXTRACT_DIR/tailscaled" ]]; then
   fail "Downloaded archive is missing expected binaries."
 fi
 
-install -d "$HOME/.tailscale/bin"
-install -m 755 "$EXTRACT_DIR/tailscale" "$HOME/.tailscale/bin/tailscale"
-install -m 755 "$EXTRACT_DIR/tailscaled" "$HOME/.tailscale/bin/tailscaled"
-log "Tailscale binaries installed to $HOME/.tailscale/bin"
+install -d "$BIN_DIR"
+install -m 755 "$EXTRACT_DIR/tailscale" "$BIN_DIR/tailscale"
+install -m 755 "$EXTRACT_DIR/tailscaled" "$BIN_DIR/tailscaled"
+log "Tailscale binaries installed to $BIN_DIR"
 
-install -d "$HOME/.local/bin"
-cat > "${TMP_DIR}/tailscale-wrapper" <<'EOF'
+install -d "$CMD_DIR"
+install -d "$DATA_DIR"
+
+cat > "${TMP_DIR}/tailscale-cmd" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 exec "$HOME/.tailscale/bin/tailscale" --socket="$HOME/.tailscale/tailscaled.sock" "$@"
 EOF
-install -m 755 "${TMP_DIR}/tailscale-wrapper" "$HOME/.local/bin/tailscale"
-log "Tailscale command wrapper installed to $HOME/.local/bin/tailscale"
+install -m 755 "${TMP_DIR}/tailscale-cmd" "$CMD_DIR/tailscale"
+
+cat > "${TMP_DIR}/tailscaled-cmd" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exec "$HOME/.tailscale/bin/tailscaled" --statedir="$HOME/.tailscale/data" --socket="$HOME/.tailscale/tailscaled.sock" --tun=userspace-networking --port=41641 "$@"
+EOF
+install -m 755 "${TMP_DIR}/tailscaled-cmd" "$CMD_DIR/tailscaled"
+
+log "Tailscale command wrappers installed to $CMD_DIR"
+
+install -d "$HOME/.local/bin"
+ln -sf "$CMD_DIR/tailscale" "$HOME/.local/bin/tailscale"
+log "Tailscale command linked to $HOME/.local/bin/tailscale"
 
 if [[ ":${PATH}:" != *":$HOME/.local/bin:"* ]]; then
   log "Note: add $HOME/.local/bin to PATH to use the tailscale command without a full path."
 fi
 
-setup_service() {
+setup_systemd_service() {
   if ! command -v systemctl >/dev/null 2>&1; then
     log "systemctl not found; skipping systemd --user service setup."
-    return
+    return 1
   fi
 
   if ! systemctl --user show-environment >/dev/null 2>&1; then
     log "systemd user services are not available in this session; skipped tailscaled.service."
-    return
+    return 1
   fi
 
   install -d "$HOME/.tailscale"
@@ -119,7 +139,7 @@ setup_service() {
     log "Local tailscaled.service not found; downloading the service unit."
     if ! curl -fsSL https://raw.githubusercontent.com/reonokiy/tailscale-nonroot/main/tailscaled.service -o "$managed_service"; then
       log "Warning: failed to retrieve tailscaled.service; skipping systemd setup."
-      return
+      return 1
     fi
   fi
 
@@ -131,6 +151,51 @@ setup_service() {
   else
     log "tailscaled.service installed but enable/start failed. Try: systemctl --user enable --now tailscaled.service"
   fi
+
+  return 0
+}
+
+setup_pm2_service() {
+  if ! command -v pm2 >/dev/null 2>&1; then
+    log "pm2 not found; install pm2 (e.g., 'npm install -g pm2') to manage tailscaled without systemd."
+    return 1
+  fi
+
+  install -d "$TAILSCALE_HOME"
+  install -d "$DATA_DIR"
+
+  local tailscaled_cmd="$CMD_DIR/tailscaled"
+  local pm2_name="tailscaled"
+
+  if [[ ! -x "$tailscaled_cmd" ]]; then
+    log "Expected wrapper $tailscaled_cmd not found or not executable."
+    return 1
+  fi
+
+  pm2 delete "$pm2_name" >/dev/null 2>&1 || true
+  if pm2 start "$tailscaled_cmd" --name "$pm2_name"; then
+    pm2 save >/dev/null 2>&1 || true
+    log "tailscaled is now managed by pm2 (process name: $pm2_name)."
+    log "Run 'pm2 restart tailscaled' to restart it or 'pm2 startup' to auto-start on login."
+    return 0
+  fi
+
+  log "pm2 failed to start tailscaled."
+  return 1
+}
+
+setup_service() {
+  if setup_systemd_service; then
+    return
+  fi
+
+  log "Falling back to pm2 for tailscaled management."
+  if setup_pm2_service; then
+    return
+  fi
+
+  log "Automatic service setup was skipped. Start tailscaled manually with:"
+  log "  $CMD_DIR/tailscaled"
 }
 
 setup_service
