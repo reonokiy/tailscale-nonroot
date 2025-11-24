@@ -173,7 +173,7 @@ setup_pm2_service() {
   fi
 
   pm2 delete "$pm2_name" >/dev/null 2>&1 || true
-  if pm2 start "$tailscaled_cmd" --name "$pm2_name"; then
+  if pm2 start "$tailscaled_cmd" --name "$pm2_name" --interpreter bash; then
     pm2 save >/dev/null 2>&1 || true
     log "tailscaled is now managed by pm2 (process name: $pm2_name)."
     log "Run 'pm2 restart tailscaled' to restart it or 'pm2 startup' to auto-start on login."
